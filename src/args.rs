@@ -8,7 +8,7 @@ pub struct TesterArgs {
     #[arg(
         long,
         short = 'X', 
-        required = true,
+        required = false,
         ignore_case = true,
         default_value = "get",
         value_parser = [
