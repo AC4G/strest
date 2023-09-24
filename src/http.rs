@@ -28,7 +28,7 @@ impl HttpRequest for HttpMethodRequest {
         headers: &[String],
         data: &String
     ) -> Result<(), ReqwestError> {
-        let mut request = match method {
+        let mut request = match method.to_lowercase().as_str() {
             "get" => client.get(url),
             "post" => client.post(url),
             "patch" => client.patch(url),

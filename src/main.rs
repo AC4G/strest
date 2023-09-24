@@ -2,22 +2,19 @@ extern crate reqwest;
 extern crate tokio;
 extern crate clap;
 
+mod ui;
 mod args;
 mod http;
 
-use crate::http::HttpRequest;
-use http::HttpMethodRequest;
+use http::{HttpMethodRequest, HttpRequest};
 use args::TesterArgs;
 use reqwest::Client;
-use std::error::Error;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tokio::time::sleep;
+use std::{error::Error, sync::{Arc, Mutex, mpsc}, time::{Duration, Instant}};
 use clap::Parser;
 use serde_json;
 use ansi_term::Colour;
-
-const REQUEST_INTERVAL_MS: f64 = 0.1;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, Event, read};
+use ui::{UiData, Ui, UiActions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -28,85 +25,149 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let headers: Vec<String> = args.headers;
     let data: String = args.data;
     let num_requests: u64 = args.requests;
-    let num_tasks: usize = args.tasks;
 
     let client: Client = reqwest::Client::new();
     let success_count = Arc::new(Mutex::new(0));
     let total_successful_time = Arc::new(Mutex::new(Duration::default()));
-
-    let mut tasks = vec![];
-    let mut tasks_to_await = vec![];
+    let error_messages = Arc::new(Mutex::new(Vec::<String>::new()));
 
     let start_time = Instant::now();
 
-    for _ in 0..num_requests {
+    let (tx, rx) = mpsc::channel();
+
+    let ui_thread = std::thread::spawn(move || {
+        let mut terminal = Ui::setup_terminal().unwrap();
+
+        let mut elapsed_time = Duration::default();
+        let mut estimated_duration = Duration::default();
+
+        let mut ui_channels: Vec<_> = (0..100)
+            .map(|_| {
+                let (tx, rx) = mpsc::channel();
+                (Arc::new(Mutex::new(tx)), rx)
+            })
+            .collect();
+
+        loop {
+            while let Ok(data) = rx.try_recv() {
+                match data {
+                    UiData::ElapsedAndEstimatedTime(elapsed, estimated) => {
+                        elapsed_time = elapsed;
+                        estimated_duration = estimated;
+                    }
+                    UiData::Terminate => {
+                        Ui::cleanup();
+                        return;
+                    }
+                }
+
+                Ui::render_ui(&mut terminal, &elapsed_time, &estimated_duration);
+            }
+
+            while let Some((ui_data_sender, ui_data_receiver)) = ui_channels.pop() {
+                while let Ok(ui_data) = ui_data_receiver.try_recv() {
+                    match ui_data {
+                        UiData::ElapsedAndEstimatedTime(elapsed, estimated) => {
+                            elapsed_time = elapsed;
+                            estimated_duration = estimated;
+                        }
+                        UiData::Terminate => {
+                            Ui::cleanup();
+                            return;
+                        }
+                    }
+                }
+                drop(ui_data_sender);
+            }
+
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    let success_count_clone_requests = Arc::clone(&success_count);
+    let total_successful_time_clone_requests = Arc::clone(&total_successful_time);
+    let method_clone = method.clone();
+    let url_clone = url.clone();
+    let headers_clone = headers.clone();
+    let data_clone = data.clone();
+    let tx_clone = tx.clone();
+    let error_messages_clone = Arc::clone(&error_messages);
+
+    let requests_thread = tokio::spawn(async move {
         let client_clone = client.clone();
-        let success_count_clone = Arc::clone(&success_count);
-        let total_successful_time_clone = Arc::clone(&total_successful_time);
-        let url_clone = url.clone();
-        let method_clone = method.clone();
-        let headers_clone = headers.clone();
-        let data_clone = data.clone();
-    
-        let task = tokio::spawn(async move {
+
+        loop {
+            if *success_count_clone_requests.lock().unwrap() >= num_requests {
+                tx_clone.send(UiData::Terminate).expect("Failed to send Termination");
+                break;
+            }
+
             let request_start_time = Instant::now();
             let response = HttpMethodRequest
                 .send_request(&client_clone, &method_clone, &url_clone, &headers_clone, &data_clone)
                 .await;
-    
+
             match response {
                 Ok(_) => {
                     let request_elapsed_time = Instant::now() - request_start_time;
-                    *success_count_clone.lock().unwrap() += 1;
-                    *total_successful_time_clone.lock().unwrap() += request_elapsed_time;
+                    *success_count_clone_requests.lock().unwrap() += 1;
+                    *total_successful_time_clone_requests.lock().unwrap() += request_elapsed_time;
                 }
                 Err(err) => {
-                    eprintln!("Request failed: {:?}", err);
+                    let error_message = format!("Request failed: {}", err);
+                    error_messages_clone.lock().unwrap().push(error_message);
+                    tx_clone.send(UiData::Terminate).expect("Failed to send Termination");
+                    break;
                 }
             }
-        });
 
-        tasks.push(task);
+            let elapsed_time = Instant::now().checked_duration_since(start_time);
+            if let Some(elapsed_time) = elapsed_time {
+                let estimated_duration = if *success_count_clone_requests.lock().unwrap() > 0 {
+                    elapsed_time
+                        .div_f32(*success_count_clone_requests.lock().unwrap() as f32)
+                        .mul_f32(num_requests as f32)
+                } else {
+                    Duration::default()
+                };
 
-        if tasks.len() >= num_tasks {
-            tasks_to_await.append(&mut tasks.split_off(num_tasks));
+                tx_clone.send(UiData::ElapsedAndEstimatedTime(elapsed_time, estimated_duration)).expect("Failed to send ElapsedAndEstimatedTime");
+            }
+            
+
+            std::thread::sleep(Duration::from_millis(1));
         }
+    });
 
-        if REQUEST_INTERVAL_MS > 0.0 {
-            let delay_secs = REQUEST_INTERVAL_MS as u64;
-            sleep(Duration::from_secs(delay_secs)).await;
+    let input_thread = std::thread::spawn(move || {
+        loop {
+            if let Event::Key(event) = read().expect("Failed to read line") {
+                match event {
+                    KeyEvent {
+                        code: KeyCode::Char('c'),
+                        modifiers: KeyModifiers::CONTROL,
+                        kind: _,
+                        state: _,
+                    } => {
+                        tx.send(UiData::Terminate).expect("Failed to send Termination");
+                        break;
+                    },
+                    _ => {}
+                }
+            }
+
+            std::thread::sleep(Duration::from_millis(100));
         }
+    });
 
-        let elapsed_time = Instant::now().checked_duration_since(start_time);
-        if let Some(elapsed_time) = elapsed_time {
-            let estimated_duration = if *success_count.lock().unwrap() > 0 {
-                elapsed_time
-                    .div_f32(*success_count.lock().unwrap() as f32)
-                    .mul_f32(num_requests as f32)
-            } else {
-                Duration::default()
-            };
+    let _ = requests_thread.await;
 
-            let message = format!(
-                "\rTime elapsed: {:.2}s Estimated: {:.2}s",
-                Colour::bold(Colour::Green).paint(format!("{:.2}", elapsed_time.as_secs_f64())),
-                Colour::bold(Colour::Cyan).paint(format!("{:.2}", estimated_duration.as_secs_f64()))
-            );
-
-            print!("{}", message);
-            std::io::Write::flush(&mut std::io::stdout()).unwrap();
-        }
-    }
-
-    tasks_to_await.extend(tasks);
-
-    for task in tasks_to_await {
-        task.await?;
-    }
-
-    println!("\r");
-
+    Ui::cleanup();
     clear_console();
+
+    if !error_messages.lock().unwrap().is_empty() {
+        println!("Error Message: {}\n", Colour::Red.paint(&error_messages.lock().unwrap()[0]));
+    }
 
     let success_count = *success_count.lock().unwrap();
     let total_successful_time = *total_successful_time.lock().unwrap();
@@ -124,9 +185,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let elapsed_time = Instant::now() - start_time;
 
-    println!("Total time taken: {:.2}s", Colour::Green.paint(format!("{:.2}", elapsed_time.as_secs_f32())));
+    println!("Total time taken: {:.2}s", Colour::Green.paint(format!("{:.2}", elapsed_time.as_secs_f64())));
 
-    if elapsed_time.as_secs() > 0 {
+    if elapsed_time.as_secs_f64() > 0.0 {
         let requests_per_minute =
             num_requests as f64 / elapsed_time.as_secs_f64() * 60.0;
         println!("Requests per minute: {:.2}", Colour::Green.paint(format!("{:.2}", requests_per_minute)));
@@ -157,6 +218,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Data: [\n{}\n]", Colour::Green.paint(data_str));
         }
     }
+
+    ui_thread.join().expect("UI thread panicked");
+    input_thread.join().expect("Input thread panicked");
 
     Ok(())
 }

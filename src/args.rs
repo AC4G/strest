@@ -1,40 +1,28 @@
 use clap::Parser;
 
-///Simple URL Tester
 #[derive(Debug, Parser)]
-#[clap(author, version, about)]
+#[clap(version, about = "Simple stress tester")]
 pub struct TesterArgs {
-    ///Sets the HTTP method
+    /// Sets the HTTP method
     #[arg(
         long,
-        short = 'X', 
+        short = 'X',
         required = false,
         ignore_case = true,
         default_value = "get",
-        value_parser = [
-            "get", 
-            "post", 
-            "patch", 
-            "put", 
-            "delete"
-        ])
-    ]
+        value_parser = ["get", "post", "patch", "put", "delete"]
+    )]
     pub method: String,
-    ///Sets the URL to test
+    /// Sets the URL to test
     #[arg(long, short, required = true)]
     pub url: String,
-    ///Sets custom headers
+    /// Sets custom headers
     #[arg(long, short = 'H', required = false)]
     pub headers: Vec<String>,
-    ///Sets the request data
-    #[arg(long, short, required = false)]
+    /// Sets the request data
+    #[arg(long, short, required = false, default_value = "")]
     pub data: String,
-    ///Sets the number of requests
+    /// Sets the number of requests
     #[arg(long, short, default_value = "10000")]
-    pub requests: u64,
-    ///Sets the number of parallel tasks
-    #[arg(long, short, default_value = "4")]
-    pub tasks: usize
+    pub requests: u64
 }
-
-
