@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client: Client = reqwest::Client::new();
     let success_count = Arc::new(Mutex::new(0));
     let total_successful_time = Arc::new(Mutex::new(Duration::default()));
-    let error_messages = Arc::new(Mutex::new(Vec::<String>::new()));
+    let error_message = Arc::new(Mutex::new(String::new()));
 
     let start_time = Instant::now();
 
@@ -40,6 +40,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let mut elapsed_time = Duration::default();
         let mut estimated_duration = Duration::default();
+        let mut current_requests = 0;
+        let mut successful_requests = 0;
 
         let mut ui_channels: Vec<_> = (0..100)
             .map(|_| {
@@ -55,13 +57,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         elapsed_time = elapsed;
                         estimated_duration = estimated;
                     }
+                    UiData::CurrentAndSuccessfulRequests(current, successful) => {
+                        current_requests = current;
+                        successful_requests = successful;
+                    }
                     UiData::Terminate => {
-                        Ui::cleanup();
                         return;
                     }
                 }
 
-                Ui::render_ui(&mut terminal, &elapsed_time, &estimated_duration);
+                Ui::render_ui(&mut terminal, &elapsed_time, &estimated_duration, &current_requests, &successful_requests, &args.requests);
             }
 
             while let Some((ui_data_sender, ui_data_receiver)) = ui_channels.pop() {
@@ -71,8 +76,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             elapsed_time = elapsed;
                             estimated_duration = estimated;
                         }
+                        UiData::CurrentAndSuccessfulRequests(current, successful) => {
+                            current_requests = current;
+                            successful_requests = successful;
+                        }
                         UiData::Terminate => {
-                            Ui::cleanup();
                             return;
                         }
                     }
@@ -84,23 +92,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let success_count_clone_requests = Arc::clone(&success_count);
+    let success_count_clone = Arc::clone(&success_count);
     let total_successful_time_clone_requests = Arc::clone(&total_successful_time);
     let method_clone = method.clone();
     let url_clone = url.clone();
     let headers_clone = headers.clone();
     let data_clone = data.clone();
     let tx_clone = tx.clone();
-    let error_messages_clone = Arc::clone(&error_messages);
+    let error_message_clone = Arc::clone(&error_message);
+    let mut requests_count: u64 = 0;
 
     let requests_thread = tokio::spawn(async move {
         let client_clone = client.clone();
 
         loop {
-            if *success_count_clone_requests.lock().unwrap() >= num_requests {
+            if *success_count_clone.lock().unwrap() >= num_requests {
                 tx_clone.send(UiData::Terminate).expect("Failed to send Termination");
                 break;
             }
+
+            requests_count += 1;
 
             let request_start_time = Instant::now();
             let response = HttpMethodRequest
@@ -110,12 +121,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             match response {
                 Ok(_) => {
                     let request_elapsed_time = Instant::now() - request_start_time;
-                    *success_count_clone_requests.lock().unwrap() += 1;
+                    *success_count_clone.lock().unwrap() += 1;
                     *total_successful_time_clone_requests.lock().unwrap() += request_elapsed_time;
                 }
                 Err(err) => {
-                    let error_message = format!("Request failed: {}", err);
-                    error_messages_clone.lock().unwrap().push(error_message);
+                    let mut error_message_guard = error_message_clone.lock().unwrap();
+                    *error_message_guard = format!("Request failed: {}", err);
                     tx_clone.send(UiData::Terminate).expect("Failed to send Termination");
                     break;
                 }
@@ -123,9 +134,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let elapsed_time = Instant::now().checked_duration_since(start_time);
             if let Some(elapsed_time) = elapsed_time {
-                let estimated_duration = if *success_count_clone_requests.lock().unwrap() > 0 {
+                let estimated_duration = if *success_count_clone.lock().unwrap() > 0 {
                     elapsed_time
-                        .div_f32(*success_count_clone_requests.lock().unwrap() as f32)
+                        .div_f32(*success_count_clone.lock().unwrap() as f32)
                         .mul_f32(num_requests as f32)
                 } else {
                     Duration::default()
@@ -133,7 +144,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 tx_clone.send(UiData::ElapsedAndEstimatedTime(elapsed_time, estimated_duration)).expect("Failed to send ElapsedAndEstimatedTime");
             }
-            
+
+            if (requests_count % 100) == 0  {
+                tx_clone.send(UiData::CurrentAndSuccessfulRequests(requests_count, *success_count_clone.lock().unwrap())).expect("Failed to send CurrentAndSuccessfulRequests");
+            }            
 
             std::thread::sleep(Duration::from_millis(1));
         }
@@ -162,11 +176,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let _ = requests_thread.await;
 
+    let sleep_duration = Duration::from_millis(100);
+    std::thread::sleep(sleep_duration);
+
     Ui::cleanup();
     clear_console();
 
-    if !error_messages.lock().unwrap().is_empty() {
-        println!("Error Message: {}\n", Colour::Red.paint(&error_messages.lock().unwrap()[0]));
+    if error_message.lock().unwrap().len() > 0 {
+        println!("Error Message: {}\n", Colour::Red.paint(&*error_message.lock().unwrap()));
     }
 
     let success_count = *success_count.lock().unwrap();

@@ -10,7 +10,10 @@ pub trait UiActions {
     fn render_ui<B: Backend>(
         terminal: &mut Terminal<B>,
         elapsed_time: &Duration,
-        estimated_duration: &Duration
+        estimated_duration: &Duration,
+        current_request: &u64,
+        successful_requests: &u64,
+        target_requests: &u64
     );
 }
 
@@ -31,13 +34,16 @@ impl UiActions for Ui {
     fn render_ui<B: Backend>(
         terminal: &mut Terminal<B>,
         elapsed_time: &Duration,
-        estimated_duration: &Duration
+        estimated_duration: &Duration,
+        current_request: &u64,
+        successful_requests: &u64,
+        target_requests: &u64
     ) {
         terminal.draw(|f| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
-                .constraints([Constraint::Percentage(20), Constraint::Percentage(30), Constraint::Percentage(50)].as_ref())
+                .constraints([Constraint::Percentage(20), Constraint::Percentage(20), Constraint::Percentage(60)].as_ref())
                 .split(f.size());
 
             let time_box = Block::default()
@@ -67,6 +73,28 @@ impl UiActions for Ui {
             let time_box_inner = time_box.inner(chunks[0]);
             f.render_widget(time_box, chunks[0]);
             f.render_widget(time_text, time_box_inner);
+
+            let stats_box = Block::default()
+            .title("Statistics")
+            .borders(Borders::ALL)
+            .padding(Padding { left: 2, right: 0, top: 1, bottom: 1 });
+
+            let stats_text = text::Line::from(vec![
+                Span::from("Current Request: "),
+                Span::styled(current_request.to_string(), Style::default().fg(Color::Yellow)),
+                Span::raw("    |    "),
+                Span::from("Successful Requests: "),
+                Span::styled(successful_requests.to_string(), Style::default().fg(Color::Magenta)),
+                Span::raw("    |    "),
+                Span::from("Target Requests: "),
+                Span::styled(target_requests.to_string(), Style::default().fg(Color::LightBlue))
+            ]);
+
+            let stats_text = Paragraph::new(stats_text).style(Style::default().bg(Color::Black));
+
+            let stats_box_inner = stats_box.inner(chunks[1]);
+            f.render_widget(stats_box, chunks[1]);
+            f.render_widget(stats_text, stats_box_inner);
         })
         .unwrap();
     }
@@ -74,5 +102,6 @@ impl UiActions for Ui {
 
 pub enum UiData {
     ElapsedAndEstimatedTime(Duration, Duration),
+    CurrentAndSuccessfulRequests(u64, u64),
     Terminate
 }
