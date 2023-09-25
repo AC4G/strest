@@ -1,2 +1,70 @@
-# strest
-Simple stress tester for URLs
+# Strest
+
+Strest is a command-line tool for stress testing web servers by sending a large number of HTTP requests. It provides insights into server performance by measuring average response times, tracking successful and failed requests, and calculating the maximum requests per minute the server can handle.
+
+## Features
+
+- Send a specified number of HTTP requests to a target URL.
+- Customize the HTTP method, headers, and request payload data.
+- Measure the average response time of successful requests.
+- Track successful and failed requests.
+- Calculate the requests per minute (RPM) metric.
+- Display real-time statistics and progress in the terminal.
+
+## Prerequisites
+
+- Make sure you have Rust and Cargo installed on your system. You can install Rust from [rustup.rs](https://rustup.rs/).
+
+## Installation
+
+To use Strest, follow these installation instructions:
+
+1. Clone the repository to your local machine:
+
+    ```bash
+    git clone https://github.com/yourusername/strest.git
+    ```
+
+2. Change to the project directory:
+
+    ```bash
+    cd strest
+    ```
+
+3. Build the project:
+
+    ```bash
+    cargo build --release
+    ```
+
+4. Once the build is complete, you can find the executable binary in the `/target/release/` directory.
+
+5. Copy the binary to a directory in your system's PATH to make it globally accessible:
+
+    ```bash
+    sudo cp /target/release/strest /usr/local/bin/
+    ```
+
+## Usage
+
+Strest is used via the command line. Here's a basic example of how to use it:
+
+```bash
+strest --url http://example.com --requests 1000
+```
+
+This command sends 1000 GET requests to http://example.com.
+
+For more options and customization, use the --help flag to see the available command-line options and their descriptions.
+
+```bash
+strest --help
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Motivation 
+
+Strest was born out of the need to stress test web servers and gain valuable insights into their performance.
