@@ -61,6 +61,18 @@ For more options and customization, use the --help flag to see the available com
 strest --help
 ```
 
+## Contributions
+
+If you are interested in contributing to the project, we welcome your input and collaboration. To ensure a smooth and effective contribution process, please follow these guidelines:
+
+1. Fork the project repository and create a dedicated branch for your work.
+
+2. Implement your changes, enhancements, or fixes in the branch, making sure to follow the coding standards and best practices outlined in the project.
+
+3. Submit a pull request with your changes. Our team will thoroughly review your contributions, provide feedback, and collaborate with you to incorporate your work into the project.
+
+We greatly appreciate your interest in contributing to Strest. Your contributions help improve the tool for everyone who uses it. Thank you for considering joining our community of contributors.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
