@@ -43,13 +43,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut current_requests = 0;
         let mut successful_requests = 0;
 
-        let mut ui_channels: Vec<_> = (0..100)
-            .map(|_| {
-                let (tx, rx) = mpsc::channel();
-                (Arc::new(Mutex::new(tx)), rx)
-            })
-            .collect();
-
         loop {
             while let Ok(data) = rx.try_recv() {
                 match data {
@@ -67,25 +60,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 Ui::render_ui(&mut terminal, &elapsed_time, &estimated_duration, &current_requests, &successful_requests, &args.requests);
-            }
-
-            while let Some((ui_data_sender, ui_data_receiver)) = ui_channels.pop() {
-                while let Ok(ui_data) = ui_data_receiver.try_recv() {
-                    match ui_data {
-                        UiData::ElapsedAndEstimatedTime(elapsed, estimated) => {
-                            elapsed_time = elapsed;
-                            estimated_duration = estimated;
-                        }
-                        UiData::CurrentAndSuccessfulRequests(current, successful) => {
-                            current_requests = current;
-                            successful_requests = successful;
-                        }
-                        UiData::Terminate => {
-                            return;
-                        }
-                    }
-                }
-                drop(ui_data_sender);
             }
 
             std::thread::sleep(Duration::from_millis(100));
