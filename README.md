@@ -21,7 +21,7 @@ To use Strest, follow these installation instructions:
 1. Clone the repository to your local machine:
 
     ```bash
-    git clone https://github.com/yourusername/strest.git
+    git clone https://github.com/AC4G/strest.git
     ```
 
 2. Change to the project directory:
