@@ -1,13 +1,12 @@
 # Strest
 
-Strest is a command-line tool for stress testing web servers by sending a large number of HTTP requests. It provides insights into server performance by measuring average response times, tracking successful and failed requests, and calculating the maximum requests per minute the server can handle.
+Strest is a command-line tool for stress testing web servers by sending a large number of HTTP requests. It provides insights into server performance by measuring average response times, and calculating the maximum requests per minute the server can handle and other relevant metrics.
 
 ## Features
 
-- Send a specified number of HTTP requests to a target URL.
+- Send HTTP requests to a specified URL for a specified duration.
 - Customize the HTTP method, headers, and request payload data.
 - Measure the average response time of successful requests.
-- Track successful and failed requests.
 - Calculate the requests per minute (RPM) metric.
 - Display real-time statistics and progress in the terminal.
 
@@ -42,7 +41,7 @@ To use Strest, follow these installation instructions:
 5. Copy the binary to a directory in your system's PATH to make it globally accessible:
 
     ```bash
-    sudo cp /target/release/strest /usr/local/bin/
+    sudo cp ./target/release/strest /usr/local/bin/
     ```
 
 ## Usage
@@ -50,16 +49,22 @@ To use Strest, follow these installation instructions:
 Strest is used via the command line. Here's a basic example of how to use it:
 
 ```bash
-strest --url http://example.com --requests 1000
+strest -u http://localhost:3000 -t 60 --no-charts
 ```
 
-This command sends 1000 GET requests to http://example.com.
+This command sends GET requests to http://example.com for 30 seconds.
 
 For more options and customization, use the --help flag to see the available command-line options and their descriptions.
 
 ```bash
 strest --help
 ```
+
+### Charts
+
+By default charts are stored in the `./charts` directory where `strest` is executed. You can change the location of the charts directory by setting via the `charts` flag.
+
+To disable charts use the `--no-charts` flag.
 
 ## Contributions
 

@@ -1,61 +1,108 @@
 extern crate reqwest;
 extern crate async_trait;
 
-use reqwest::{Client, Error as ReqwestError};
-use async_trait::async_trait;
+use std::time::Duration;
 
-#[async_trait]
-pub trait HttpRequest {
-    async fn send_request(
-        &self, 
-        client: &Client, 
-        method: &str, 
-        url: &str,
-        headers: &[String],
-        data: &String
-    ) -> Result<(), ReqwestError>;
-}
+use reqwest::{Client, Request};
+use tokio::{sync::broadcast, time::{sleep, Instant}};
 
-pub struct HttpMethodRequest;
+use crate::{args::{HttpMethod, TesterArgs}, metrics::Metrics};
 
-#[async_trait]
-impl HttpRequest for HttpMethodRequest {
-    async fn send_request(
-        &self,
-        client: &Client,
-        method: &str,
-        url: &str,
-        headers: &[String],
-        data: &String
-    ) -> Result<(), ReqwestError> {
-        let mut request = match method.to_lowercase().as_str() {
-            "get" => client.get(url),
-            "post" => client.post(url),
-            "patch" => client.patch(url),
-            "put" => client.put(url),
-            "delete" => client.delete(url),
-            _ => {
-                eprintln!("Invalid HTTP method: {}", method);
-                return Ok(());
-            }
-        };
+pub fn setup_request_sender(
+    args: &TesterArgs,
+    shutdown_tx: &broadcast::Sender<u16>,
+    metrics_tx: &broadcast::Sender<Metrics>,
+) -> Option<tokio::task::JoinHandle<()>> {
+    let shutdown_tx = shutdown_tx.clone();
+    let metrics_tx = metrics_tx.clone();
 
-        for header in headers {
-            let parts: Vec<&str> = header.splitn(2, ':').collect();
-            if parts.len() == 2 {
-                request = request.header(parts[0], parts[1]);
-            } else {
-                eprintln!("Invalid header format: {}", header);
-            }
-        }
+    let client: Client = Client::new();
+    let method = &args.method;
+    let url = &args.url;
+    let data = &args.data;
+    let headers = &args.headers;
 
-        let body = reqwest::Body::from(data.clone());
-        request = request.body(body);
+    let mut request = match method {
+        HttpMethod::Get => client.get(url),
+        HttpMethod::Post => client.post(url),
+        HttpMethod::Patch => client.patch(url),
+        HttpMethod::Put => client.put(url),
+        HttpMethod::Delete => client.delete(url)
+    };
 
-        
-        request.send().await?;
-
-        Ok(())
+    for (key, value) in headers {
+        request = request.header(key, value);
     }
+
+    let body = reqwest::Body::from(data.clone());
+    request = request.body(body);
+
+    let built_request = match request.build() {
+        Ok(req) => req,
+        Err(e) => {
+            eprintln!("Failed to build request: {e}");
+            let _ = shutdown_tx.send(1);
+            return None;
+        }
+    };
+
+    Some(create_sender_task(
+        shutdown_tx,
+        metrics_tx,
+        client.clone(),
+        built_request
+    ))
 }
 
+fn create_sender_task(
+    shutdown_tx: broadcast::Sender<u16>,
+    metrics_tx: broadcast::Sender<Metrics>,
+    client: Client,
+    request: Request
+) -> tokio::task::JoinHandle<()> {
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async move {
+            let mut shutdown_rx = shutdown_tx.subscribe();
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            let mut concurrent = 0;
+
+            loop {
+                tokio::select! {
+                    Ok(_) = shutdown_rx.recv() => break,
+
+                    _ = interval.tick() => {
+                        concurrent += 1;
+
+                        for _ in 0..concurrent {
+                            let shutdown_tx = shutdown_tx.clone();
+                            let metrics_tx = metrics_tx.clone();
+                            let client = client.clone();
+                            let req = request.try_clone().unwrap();
+
+                            tokio::spawn(async move {
+                                let mut shutdown_rx = shutdown_tx.subscribe();
+
+                                loop {
+                                    tokio::select! {
+                                        Ok(_) = shutdown_rx.recv() => break,
+                                        _ = async {
+                                            let start = Instant::now();
+                                            let status = match client.execute(req.try_clone().unwrap()).await {
+                                                Ok(resp) => resp.status().as_u16(),
+                                                Err(_) => 500,
+                                            };
+                                            let _ = metrics_tx.send(Metrics::new(start, status));
+                                        } => {}
+                                    }
+
+                                    sleep(Duration::from_millis(100)).await;
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        })
+    })
+}
