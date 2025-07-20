@@ -58,9 +58,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         request_sender_handle.unwrap()
     );
 
-    if !args.no_charts {
-        let metrics = metrics_result.expect("Metrics collector failed");
+    let metrics = metrics_result.expect("Metrics collector failed");
 
+    if !args.no_charts && !metrics.is_empty() {
         println!("📈 Plotting charts...");
 
         plot_metrics(&metrics, &args).await.expect("Failed to plot charts");
