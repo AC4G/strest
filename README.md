@@ -1,10 +1,10 @@
 # Strest
 
-Strest is a command-line tool for stress testing web servers by sending a large number of HTTP requests. It provides insights into server performance by measuring average response times, and calculating the maximum requests per minute the server can handle.
+Strest is a command-line tool for stress testing web servers by sending a large number of HTTP requests. It provides insights into server performance by measuring average response times, and calculating the maximum requests per minute the server can handle and other relevant metrics.
 
 ## Features
 
-- Send a specified number of HTTP requests to a target URL.
+- Send HTTP requests to a specified URL for a specified duration.
 - Customize the HTTP method, headers, and request payload data.
 - Measure the average response time of successful requests.
 - Calculate the requests per minute (RPM) metric.
@@ -49,7 +49,7 @@ To use Strest, follow these installation instructions:
 Strest is used via the command line. Here's a basic example of how to use it:
 
 ```bash
-strest --url http://example.com
+strest -u http://localhost:3000 -t 60 --no-charts
 ```
 
 This command sends GET requests to http://example.com for 30 seconds.
