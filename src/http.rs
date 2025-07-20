@@ -4,7 +4,7 @@ extern crate async_trait;
 use std::time::Duration;
 
 use reqwest::{Client, Proxy, Request};
-use tokio::{sync::broadcast, time::{sleep, Instant}};
+use tokio::{sync::broadcast, time::{interval, sleep, Instant}};
 
 use crate::{args::{HttpMethod, TesterArgs}, metrics::Metrics};
 
@@ -63,6 +63,7 @@ pub fn setup_request_sender(
     };
 
     Some(create_sender_task(
+        args,
         shutdown_tx,
         metrics_tx,
         client,
@@ -70,62 +71,78 @@ pub fn setup_request_sender(
     ))
 }
 
-fn create_sender_task(
+
+pub fn create_sender_task(
+    args: &TesterArgs,
     shutdown_tx: broadcast::Sender<u16>,
     metrics_tx: broadcast::Sender<Metrics>,
     client: Client,
-    request: Request
+    request: Request,
 ) -> tokio::task::JoinHandle<()> {
-    tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async move {
-            let test_request = request.try_clone().unwrap_or(request.try_clone().expect("Failed to clone request"));
+    let shutdown_tx = shutdown_tx.clone();
+    let metrics_tx = metrics_tx.clone();
 
-            if let Err(e) = client.execute(test_request).await {
-                eprintln!(" Test request failed: {}", e);
-                return;
-            }
+    let request_clone = request
+        .try_clone()
+        .unwrap_or_else(|| request.try_clone().expect("Failed to clone request"));
 
-            let mut shutdown_rx = shutdown_tx.subscribe();
-            let mut interval = tokio::time::interval(Duration::from_secs(10));
-            let mut concurrent = 0;
+    let max_tasks = args.max_tasks;
+    let spawn_rate = args.spawn_rate_per_tick;
+    let tick_interval = args.tick_interval;
 
-            loop {
-                tokio::select! {
-                    Ok(_) = shutdown_rx.recv() => break,
+    tokio::spawn(async move {
+        if let Err(e) = client.execute(request_clone).await {
+            eprintln!("Test request failed: {}", e);
+            let _ = shutdown_tx.send(1);
+            return;
+        }
 
-                    _ = interval.tick() => {
-                        concurrent += 1;
+        let mut shutdown_rx = shutdown_tx.subscribe();
+        let mut interval = interval(Duration::from_millis(tick_interval));
+        let mut total_spawned = 0;
 
-                        for _ in 0..concurrent {
-                            let shutdown_tx = shutdown_tx.clone();
-                            let metrics_tx = metrics_tx.clone();
-                            let client = client.clone();
-                            let req = request.try_clone().unwrap();
+        loop {
+            tokio::select! {
+                Ok(_) = shutdown_rx.recv() => break,
 
-                            tokio::spawn(async move {
-                                let mut shutdown_rx = shutdown_tx.subscribe();
+                _ = interval.tick() => {
+                    if total_spawned >= max_tasks {
+                        continue;
+                    }
 
-                                loop {
-                                    tokio::select! {
-                                        Ok(_) = shutdown_rx.recv() => break,
-                                        _ = async {
-                                            let start = Instant::now();
-                                            let status = match client.execute(req.try_clone().unwrap()).await {
-                                                Ok(resp) => resp.status().as_u16(),
-                                                Err(_) => 500,
-                                            };
-                                            let _ = metrics_tx.send(Metrics::new(start, status));
-                                        } => {}
-                                    }
+                    let remaining = max_tasks - total_spawned;
+                    let batch = remaining.min(spawn_rate);
 
-                                    sleep(Duration::from_millis(100)).await;
+                    for _ in 0..batch {
+                        total_spawned += 1;
+
+                        let shutdown_tx = shutdown_tx.clone();
+                        let metrics_tx = metrics_tx.clone();
+                        let client = client.clone();
+                        let req = request.try_clone().unwrap();
+
+                        tokio::spawn(async move {
+                            let mut shutdown_rx = shutdown_tx.subscribe();
+
+                            loop {
+                                tokio::select! {
+                                    Ok(_) = shutdown_rx.recv() => break,
+                                    _ = async {
+                                        let start = Instant::now();
+                                        let status = match client.execute(req.try_clone().unwrap()).await {
+                                            Ok(resp) => resp.status().as_u16(),
+                                            Err(_) => 500,
+                                        };
+                                        let _ = metrics_tx.send(Metrics::new(start, status));
+                                    } => {}
                                 }
-                            });
-                        }
+
+                                sleep(Duration::from_millis(100)).await;
+                            }
+                        });
                     }
                 }
             }
-        })
+        }
     })
 }
