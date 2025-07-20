@@ -111,13 +111,13 @@ impl UiActions for Ui {
         let x_min = if x_max > 10.0 { x_max - 10.0 } else { 0.0 };
 
         let datasets = vec![ratatui::widgets::Dataset::default()
-            .name("Latency")
+            .name("Latency Chart")
             .marker(ratatui::symbols::Marker::Dot)
             .style(Style::default().fg(Color::Cyan))
             .data(&data_points)];
 
         let chart = ratatui::widgets::Chart::new(datasets)
-            .block(Block::default().title("Latency Chart").borders(Borders::ALL))
+            .block(Block::default().borders(Borders::ALL))
             .x_axis(
                 ratatui::widgets::Axis::default()
                     .title("Window Second")
