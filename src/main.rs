@@ -58,13 +58,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         request_sender_handle.unwrap()
     );
 
-    let metrics = metrics_result.expect("Metrics collector failed");
+    if !args.no_charts {
+        let metrics = metrics_result.expect("Metrics collector failed");
 
-    println!("📈 Plotting charts...");
+        println!("📈 Plotting charts...");
 
-    plot_metrics(&metrics, &args).await.expect("Failed to plot charts");
+        plot_metrics(&metrics, &args).await.expect("Failed to plot charts");
 
-    println!("📈 Charts saved in {}", args.charts_path);
+        println!("📈 Charts saved in {}", args.charts_path);
+    }
 
     std::process::exit(0);
 }

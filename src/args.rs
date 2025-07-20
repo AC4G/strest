@@ -45,6 +45,10 @@ pub struct TesterArgs {
     #[arg(long = "charts", short = 'c', default_value = "./charts")]
     pub charts_path: String,
 
+    /// Disable chart generation
+    #[arg(long = "no-charts")]
+    pub no_charts: bool,
+
     /// Proxy URL (optional)
     #[arg(long = "proxy", short = 'p')]
     pub proxy_url: Option<String>,

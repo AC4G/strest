@@ -49,16 +49,22 @@ To use Strest, follow these installation instructions:
 Strest is used via the command line. Here's a basic example of how to use it:
 
 ```bash
-strest --url http://example.com --requests 1000
+strest --url http://example.com
 ```
 
-This command sends 1000 GET requests to http://example.com.
+This command sends GET requests to http://example.com for 30 seconds.
 
 For more options and customization, use the --help flag to see the available command-line options and their descriptions.
 
 ```bash
 strest --help
 ```
+
+### Charts
+
+By default charts are stored in the `./charts` directory where `strest` is executed. You can change the location of the charts directory by setting via the `charts` flag.
+
+To disable charts use the `--no-charts` flag.
 
 ## Contributions
 
