@@ -52,7 +52,7 @@ Strest is used via the command line. Here's a basic example of how to use it:
 strest -u http://localhost:3000 -t 60 --no-charts
 ```
 
-This command sends GET requests to http://example.com for 30 seconds.
+This command sends GET requests to `http://localhost:3000` for 60 seconds.
 
 For more options and customization, use the --help flag to see the available command-line options and their descriptions.
 
