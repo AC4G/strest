@@ -52,6 +52,18 @@ pub struct TesterArgs {
     /// Proxy URL (optional)
     #[arg(long = "proxy", short = 'p')]
     pub proxy_url: Option<String>,
+
+    /// Max number of concurrent tasks for each request worker (default: 1000)
+    #[arg(long = "max-tasks", short = 'm', default_value = "1000")]
+    pub max_tasks: usize,
+
+    /// Number of tasks to spawn per tick (default: 1)
+    #[arg(long = "spawn-rate", short = 'r', default_value = "1")]
+    pub spawn_rate_per_tick: usize,
+
+    /// Interval between ticks (milliseconds) (default: 1000)
+    #[arg(long = "tick-interval", short = 'i', default_value = "1000")]
+    pub tick_interval: u64,
 }
 
 fn parse_header(s: &str) -> Result<(String, String), String> {
