@@ -41,7 +41,7 @@ To use Strest, follow these installation instructions:
 5. Copy the binary to a directory in your system's PATH to make it globally accessible:
 
     ```bash
-    sudo cp /target/release/strest /usr/local/bin/
+    sudo cp ./target/release/strest /usr/local/bin/
     ```
 
 ## Usage

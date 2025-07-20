@@ -1,28 +1,61 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Patch,
+    Put,
+    Delete,
+}
 
 #[derive(Debug, Parser)]
-#[clap(version, about = "Simple stress tester")]
+#[clap(version, about = "Simple HTTP stress tester")]
 pub struct TesterArgs {
-    /// Sets the HTTP method
+    /// HTTP method to use
     #[arg(
         long,
         short = 'X',
-        required = false,
-        ignore_case = true,
         default_value = "get",
-        value_parser = ["get", "post", "patch", "put", "delete"]
+        ignore_case = true
     )]
-    pub method: String,
-    /// Sets the URL to test
-    #[arg(long, short, required = true)]
+    pub method: HttpMethod,
+
+    /// Target URL for the stress test
+    #[arg(long, short)]
     pub url: String,
-    /// Sets custom headers
-    #[arg(long, short = 'H', required = false)]
-    pub headers: Vec<String>,
-    /// Sets the request data
-    #[arg(long, short, required = false, default_value = "")]
+
+    /// HTTP headers in 'Key: Value' format (repeatable)
+    #[arg(long, short = 'H', value_parser = parse_header)]
+    pub headers: Vec<(String, String)>,
+
+    /// Request body data (for POST/PUT)
+    #[arg(long, short, default_value = "")]
     pub data: String,
-    /// Sets the number of requests
-    #[arg(long, short, default_value = "10000")]
-    pub requests: u64
+
+    /// Duration of test (seconds)
+    #[arg(long = "duration", short = 't', default_value = "30")]
+    pub target_duration: u64,
+
+    /// Expected HTTP status code
+    #[arg(long = "status", short = 's', default_value = "200")]
+    pub expected_status_code: u16,
+
+    /// Path to save charts to
+    #[arg(long = "charts", short = 'c', default_value = "./charts")]
+    pub charts_path: String,
+
+    /// Proxy URL (optional)
+    #[arg(long = "proxy", short = 'p')]
+    pub proxy_url: Option<String>,
+}
+
+fn parse_header(s: &str) -> Result<(String, String), String> {
+    let parts: Vec<&str> = s.splitn(2, ':').collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid header format: '{}'. Expected 'Key: Value'", s));
+    }
+    let key = parts[0].trim().to_string();
+    let value = parts[1].trim().to_string();
+    Ok((key, value))
 }
