@@ -3,14 +3,14 @@ use crossterm::{execute, terminal::{enable_raw_mode, disable_raw_mode, EnterAlte
 use ratatui::{backend::CrosstermBackend, layout::{Constraint, Direction, Layout}, prelude::{text, Backend}, style::{Color, Style}, text::Span, widgets::{Block, Borders, Paragraph, Wrap}, Terminal};
 use std::time::Duration;
 use std::io;
-use tokio::sync::broadcast::{self};
+use tokio::sync::{broadcast::{self}, watch};
 
 use crate::args::TesterArgs;
     
 pub trait UiActions {
     fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, Box<dyn Error>>;
     fn cleanup();
-    fn render_ui<B: Backend>(
+    fn render<B: Backend>(
         terminal: &mut Terminal<B>,
         elapsed_time: &Duration,
         current_request: &u64,
@@ -36,7 +36,7 @@ impl UiActions for Ui {
         execute!(std::io::stdout(), LeaveAlternateScreen).ok();
     }
 
-    fn render_ui<B: Backend>(
+    fn render<B: Backend>(
     terminal: &mut Terminal<B>,
     elapsed_time: &Duration,
     current_request: &u64,
@@ -190,16 +190,26 @@ impl UiData {
             rpm,
         }
     }
+
+    pub fn default() -> Self {
+        Self {
+            elapsed_time: Duration::from_secs(0),
+            current_requests: 0,
+            successful_requests: 0,
+            latencies: Vec::new(),
+            rps: 0.0,
+            rpm: 0.0,
+        }
+    }
 }
 
 pub fn setup_render_ui(
     args: &TesterArgs,
     shutdown_tx: &broadcast::Sender<u16>,
-    ui_tx: &broadcast::Sender<UiData>,
+    ui_tx: &watch::Sender<UiData>,
 ) -> tokio::task::JoinHandle<()> {
-    let mut rx = ui_tx.subscribe();
+    let mut ui_rx = ui_tx.subscribe();
     let mut shutdown_rx = shutdown_tx.subscribe();
-
     let target_duration = args.target_duration;
 
     tokio::spawn(async move {
@@ -207,8 +217,13 @@ pub fn setup_render_ui(
 
         loop {
             tokio::select! {
-                Ok(msg) = rx.recv() => {
-                    Ui::render_ui(
+                Ok(_) = shutdown_rx.recv() => {
+                    Ui::cleanup();
+                    break;
+                }
+                Ok(_) = ui_rx.changed() => {
+                    let msg = ui_rx.borrow().clone();
+                    Ui::render(
                         &mut terminal,
                         &msg.elapsed_time,
                         &msg.current_requests,
@@ -218,12 +233,7 @@ pub fn setup_render_ui(
                         &msg.rps,
                         &msg.rpm
                     );
-                },
-                Ok(_) = shutdown_rx.recv() => {
-                    Ui::cleanup();
-                    return;
-                },
-                else => break,
+                }
             }
         }
     })

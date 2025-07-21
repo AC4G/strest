@@ -63,8 +63,10 @@ pub fn setup_request_sender(
         }
     };
 
+    let args_clone = args.clone();
+
     Some(create_sender_task(
-        args,
+        args_clone,
         shutdown_tx,
         metrics_tx,
         client,
@@ -74,7 +76,7 @@ pub fn setup_request_sender(
 
 
 pub fn create_sender_task(
-    args: &TesterArgs,
+    args: TesterArgs,
     shutdown_tx: broadcast::Sender<u16>,
     metrics_tx: broadcast::Sender<Metrics>,
     client: Client,
