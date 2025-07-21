@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use reqwest::{Client, Proxy, Request};
 use tokio::{sync::broadcast, time::{interval, sleep, Instant}};
+use tracing::error;
 
 use crate::{args::{HttpMethod, TesterArgs}, metrics::Metrics};
 
@@ -25,7 +26,7 @@ pub fn setup_request_sender(
                 client_builder = client_builder.proxy(proxy);
             }
             Err(e) => {
-                eprintln!("Invalid proxy URL '{}': {}", proxy_url, e);
+                error!("Invalid proxy URL '{}': {}", proxy_url, e);
                 let _ = shutdown_tx.send(1);
                 return None;
             }
@@ -35,7 +36,7 @@ pub fn setup_request_sender(
     let client = match client_builder.build() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to build HTTP client: {}", e);
+            error!("Failed to build HTTP client: {}", e);
             let _ = shutdown_tx.send(1);
             return None;
         }
@@ -56,7 +57,7 @@ pub fn setup_request_sender(
     let request = match request_builder.body(args.data.clone()).build() {
         Ok(req) => req,
         Err(e) => {
-            eprintln!("Failed to build request: {}", e);
+            error!("Failed to build request: {}", e);
             let _ = shutdown_tx.send(1);
             return None;
         }
@@ -92,8 +93,7 @@ pub fn create_sender_task(
 
     tokio::spawn(async move {
         if let Err(e) = client.execute(request_clone).await {
-            eprintln!("Test request failed: {}", e);
-            let _ = shutdown_tx.send(1);
+            error!("Test request failed: {}", e);
             return;
         }
 

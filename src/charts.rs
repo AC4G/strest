@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use plotters::prelude::*;
 use tokio::fs;
+use tracing::{error, info};
 
 use crate::{args::TesterArgs, metrics::Metrics};
 
@@ -13,36 +14,36 @@ pub async fn plot_metrics(
     let expected_status_code = &args.expected_status_code;
 
     if let Err(e) = fs::create_dir_all(Path::new(path)).await {
-        eprintln!("Failed to create output directory '{}': {}", path, e);
+        error!("Failed to create output directory '{}': {}", path, e);
         return Err(e.into());
     }
     
-    println!("Plotting average response time...");
+    info!("Plotting average response time...");
 
     plot_average_response_time(metrics, &format!("{}/average_response_time.png", path))
         .expect("Failed to plot average response time");
 
-    println!("Plotting cumulative successful requests...");
+    info!("Plotting cumulative successful requests...");
 
     plot_cumulative_successful_requests(metrics, expected_status_code, &format!("{}/cumulative_successful_requests.png", path))
         .expect("Failed to plot successful requests");
 
-    println!("Plotting cumulative error rate...");
+    info!("Plotting cumulative error rate...");
 
     plot_cumulative_error_rate(metrics, expected_status_code, &format!("{}/cumulative_error_rate.png", path))
         .expect("Failed to plot error rate");
 
-    println!("Plotting latency percentiles...");
+    info!("Plotting latency percentiles...");
 
     plot_latency_percentiles(metrics, &format!("{}/latency_percentiles", path))
         .expect("Failed to plot latency percentiles");
 
-    println!("Plotting requests per second...");
+    info!("Plotting requests per second...");
 
     plot_requests_per_second(metrics, &format!("{}/requests_per_second.png", path))
         .expect("Failed to plot requests per second");
 
-    println!("Plotting cumulative total requests...");
+    info!("Plotting cumulative total requests...");
 
     plot_cumulative_total_requests(metrics, &format!("{}/cumulative_total_requests.png", path))
         .expect("Failed to plot cumulative total requests");

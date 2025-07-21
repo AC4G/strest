@@ -8,8 +8,10 @@ mod http;
 mod metrics;
 mod shutdown;
 mod charts;
+mod logger;
 
 use args::TesterArgs;
+use tracing::info;
 use std::error::Error;
 use clap::Parser;
 use tokio::sync::broadcast;
@@ -17,6 +19,8 @@ use crate::{charts::plot_metrics, metrics::Metrics, ui::{setup_render_ui, UiData
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    logger::init_logging();
+
     let args = TesterArgs::parse();
 
     // calculates the size of the metrics buffer based on the target duration
@@ -61,11 +65,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let metrics = metrics_result.expect("Metrics collector failed");
 
     if !args.no_charts && !metrics.is_empty() {
-        println!("📈 Plotting charts...");
+        info!("📈 Plotting charts...");
 
         plot_metrics(&metrics, &args).await.expect("Failed to plot charts");
 
-        println!("📈 Charts saved in {}", args.charts_path);
+        info!("📈 Charts saved in {}", args.charts_path);
     }
 
     std::process::exit(0);
