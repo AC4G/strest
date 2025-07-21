@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, time::Duration};
 
-use tokio::{sync::{broadcast, mpsc}, task::JoinHandle, time::Instant};
+use tokio::{sync::{broadcast, mpsc, watch}, task::JoinHandle, time::Instant};
 
 use crate::{args::TesterArgs, ui::UiData};
 
@@ -24,9 +24,8 @@ impl Metrics {
 pub fn setup_metrics_collector(
     args: &TesterArgs,
     shutdown_tx: &broadcast::Sender<u16>,
-    mut resp_rx: broadcast::Receiver<Metrics>,
-    ui_tx: &broadcast::Sender<UiData>,
-    metrics_buffer_size: &usize
+    mut metrics_collector_rx: broadcast::Receiver<Metrics>,
+    ui_tx: &watch::Sender<UiData>
 ) -> JoinHandle<Vec<Metrics>> {
     let shutdown_tx_main = shutdown_tx.clone();
     let mut shutdown_rx = shutdown_tx_main.subscribe();
@@ -35,19 +34,20 @@ pub fn setup_metrics_collector(
     let target_duration = Duration::from_secs(args.target_duration);
     let expected_status_code = args.expected_status_code;
 
-    let (metrics_tx, mut metrics_rx) = mpsc::channel::<Metrics>(*metrics_buffer_size);
+    let (metrics_tx, mut metrics_rx) = mpsc::unbounded_channel::<Metrics>();
+    let (pending_tx, mut pending_rx) = mpsc::unbounded_channel::<Metrics>();
 
     let shutdown_tx_clone = shutdown_tx_main.clone();
     let ui_tx_clone = ui_tx.clone();
 
     tokio::spawn(async move {
         let mut latency_window: VecDeque<(Instant, f64)> = VecDeque::new();
-        let mut request_timestamps: VecDeque<Instant> = VecDeque::new();
+        let mut rps_window: VecDeque<(Instant, usize)> = VecDeque::new();
         let mut current_requests = 0;
         let mut successful_requests = 0;
+        let mut collected_metrics = Vec::new();
         let start_time = Instant::now();
         let mut last_ui_update = Instant::now();
-        let mut collected_metrics = Vec::new();
 
         let _ = ui_tx_clone.send(UiData::new(
             Duration::ZERO,
@@ -72,8 +72,6 @@ pub fn setup_metrics_collector(
                     }
 
                     latency_window.push_back((now, latency_ms));
-                    request_timestamps.push_back(now);
-
                     while let Some((ts, _)) = latency_window.front() {
                         if now.duration_since(*ts) > Duration::from_secs(10) {
                             latency_window.pop_front();
@@ -82,20 +80,31 @@ pub fn setup_metrics_collector(
                         }
                     }
 
-                    while let Some(ts) = request_timestamps.front() {
+                    if let Some((ts, count)) = rps_window.back_mut() {
+                        if now.duration_since(*ts) < Duration::from_millis(100) {
+                            *count += 1;
+                        } else {
+                            rps_window.push_back((now, 1));
+                        }
+                    } else {
+                        rps_window.push_back((now, 1));
+                    }
+
+                    while let Some((ts, _)) = rps_window.front() {
                         if now.duration_since(*ts) > Duration::from_secs(60) {
-                            request_timestamps.pop_front();
+                            rps_window.pop_front();
                         } else {
                             break;
                         }
                     }
 
-                    let rps = request_timestamps
+                    let rps: f64 = rps_window
                         .iter()
-                        .filter(|&&ts| now.duration_since(ts) <= Duration::from_secs(1))
-                        .count() as f64;
+                        .filter(|(ts, _)| now.duration_since(*ts) <= Duration::from_secs(1))
+                        .map(|(_, count)| *count)
+                        .sum::<usize>() as f64;
 
-                    let rpm = request_timestamps.len() as f64;
+                    let rpm = rps * 60.0;
 
                     if last_ui_update.elapsed() >= Duration::from_millis(100) {
                         let elapsed_time = start_time.elapsed();
@@ -106,6 +115,7 @@ pub fn setup_metrics_collector(
                                 (secs_since_start, latency)
                             })
                             .collect();
+
                         let _ = ui_tx_clone.send(UiData::new(
                             elapsed_time,
                             current_requests,
@@ -114,13 +124,16 @@ pub fn setup_metrics_collector(
                             rps,
                             rpm,
                         ));
-                        last_ui_update = Instant::now();
+
+                        last_ui_update = now;
                     }
 
                     if now.duration_since(start_time) >= target_duration {
                         let _ = shutdown_tx_clone.send(1);
                         break;
                     }
+
+                    tokio::task::yield_now().await;
                 },
                 else => break,
             }
@@ -129,15 +142,33 @@ pub fn setup_metrics_collector(
 
     tokio::spawn(async move {
         let mut metrics = Vec::new();
+        let mut pending_metrics = Vec::new();
+
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                while let Ok(msg) = pending_rx.try_recv() {
+                    pending_metrics.push(msg);
+                }
+
+                if !pending_metrics.is_empty() {
+                    for m in pending_metrics.drain(..) {
+                        let _ = metrics_tx.send(m);
+                    }
+                }
+            }
+        });
 
         loop {
             tokio::select! {
                 Ok(_) = shutdown_rx.recv() => {
                     break;
                 }
-                Ok(msg) = resp_rx.recv() => {
-                    let _ = metrics_tx.send(msg.clone()).await;
-                    metrics.push(msg);
+
+                Ok(msg) = metrics_collector_rx.recv() => {
+                    metrics.push(msg.clone());
+                    let _ = pending_tx.send(msg);
                 }
             }
         }

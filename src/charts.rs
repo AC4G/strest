@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use plotters::prelude::*;
 use tokio::fs;
+use tracing::{error, info};
 
 use crate::{args::TesterArgs, metrics::Metrics};
 
@@ -13,36 +14,36 @@ pub async fn plot_metrics(
     let expected_status_code = &args.expected_status_code;
 
     if let Err(e) = fs::create_dir_all(Path::new(path)).await {
-        eprintln!("Failed to create output directory '{}': {}", path, e);
+        error!("Failed to create output directory '{}': {}", path, e);
         return Err(e.into());
     }
     
-    println!("Plotting average response time...");
+    info!("Plotting average response time...");
 
     plot_average_response_time(metrics, &format!("{}/average_response_time.png", path))
         .expect("Failed to plot average response time");
 
-    println!("Plotting cumulative successful requests...");
+    info!("Plotting cumulative successful requests...");
 
     plot_cumulative_successful_requests(metrics, expected_status_code, &format!("{}/cumulative_successful_requests.png", path))
         .expect("Failed to plot successful requests");
 
-    println!("Plotting cumulative error rate...");
+    info!("Plotting cumulative error rate...");
 
     plot_cumulative_error_rate(metrics, expected_status_code, &format!("{}/cumulative_error_rate.png", path))
         .expect("Failed to plot error rate");
 
-    println!("Plotting latency percentiles...");
+    info!("Plotting latency percentiles...");
 
     plot_latency_percentiles(metrics, &format!("{}/latency_percentiles", path))
         .expect("Failed to plot latency percentiles");
 
-    println!("Plotting requests per second...");
+    info!("Plotting requests per second...");
 
     plot_requests_per_second(metrics, &format!("{}/requests_per_second.png", path))
         .expect("Failed to plot requests per second");
 
-    println!("Plotting cumulative total requests...");
+    info!("Plotting cumulative total requests...");
 
     plot_cumulative_total_requests(metrics, &format!("{}/cumulative_total_requests.png", path))
         .expect("Failed to plot cumulative total requests");
@@ -51,9 +52,6 @@ pub async fn plot_metrics(
 }
 
 fn plot_average_response_time(metrics: &Vec<Metrics>, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    use std::collections::BTreeMap;
-    use plotters::prelude::*;
-
     let root = BitMapBackend::new(path, (1600, 600)).into_drawing_area();
     root.fill(&WHITE)?;
 
@@ -107,9 +105,6 @@ pub fn plot_cumulative_successful_requests(
     expected_status_code: &u16,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::collections::BTreeMap;
-    use plotters::prelude::*;
-
     let root = BitMapBackend::new(path, (1600, 600)).into_drawing_area();
     root.fill(&WHITE)?;
 
@@ -163,9 +158,6 @@ pub fn plot_cumulative_error_rate(
     expected_status_code: &u16,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::collections::BTreeMap;
-    use plotters::prelude::*;
-
     let root = BitMapBackend::new(path, (1600, 600)).into_drawing_area();
     root.fill(&WHITE)?;
 
@@ -223,10 +215,6 @@ pub fn plot_latency_percentiles(
         *sorted.get(index.min(sorted.len() - 1)).unwrap_or(&0)
     }
 
-    if metrics.is_empty() {
-        return Ok(());
-    }
-
     let first_start = metrics[0].start;
 
     let mut grouped: BTreeMap<u64, Vec<u128>> = BTreeMap::new();
@@ -248,7 +236,9 @@ pub fn plot_latency_percentiles(
         seconds.push(sec);
     }
 
-    let y_max = *p99s.iter().max().unwrap_or(&100);
+    let y_max_p50 = *p50s.iter().max().unwrap_or(&100);
+    let y_max_p90 = *p90s.iter().max().unwrap_or(&100);
+    let y_max_p99 = *p99s.iter().max().unwrap_or(&100);
 
     fn draw_chart(
         seconds: &Vec<u64>,
@@ -290,7 +280,7 @@ pub fn plot_latency_percentiles(
         "Latency P50",
         BLUE,
         &format!("{}_P50.png", base_path),
-        y_max,
+        y_max_p50,
     )?;
 
     draw_chart(
@@ -299,7 +289,7 @@ pub fn plot_latency_percentiles(
         "Latency P90",
         GREEN,
         &format!("{}_P90.png", base_path),
-        y_max,
+        y_max_p90,
     )?;
 
     draw_chart(
@@ -308,7 +298,7 @@ pub fn plot_latency_percentiles(
         "Latency P99",
         RED,
         &format!("{}_P99.png", base_path),
-        y_max,
+        y_max_p99,
     )?;
 
     Ok(())
@@ -360,9 +350,6 @@ pub fn plot_cumulative_total_requests(
     metrics: &Vec<Metrics>,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::collections::BTreeMap;
-    use plotters::prelude::*;
-
     let root = BitMapBackend::new(path, (1600, 600)).into_drawing_area();
     root.fill(&WHITE)?;
 

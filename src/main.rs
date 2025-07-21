@@ -8,25 +8,24 @@ mod http;
 mod metrics;
 mod shutdown;
 mod charts;
+mod logger;
 
 use args::TesterArgs;
+use tracing::info;
 use std::error::Error;
 use clap::Parser;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 use crate::{charts::plot_metrics, metrics::Metrics, ui::{setup_render_ui, UiData}};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    logger::init_logging();
+
     let args = TesterArgs::parse();
 
-    // calculates the size of the metrics buffer based on the target duration
-    let d = args.target_duration;
-    let base_requests = 10 * d * (d + 1) / 2;
-    let metrics_buffer_size = (base_requests as f64 * 1.2).ceil() as usize;
-
     let (shutdown_tx, _) = broadcast::channel::<u16>(1);
-    let (ui_tx, _) = broadcast::channel::<UiData>(100);
-    let (metrics_tx, metrics_rx) = broadcast::channel::<Metrics>(metrics_buffer_size);
+    let (ui_tx, _) = watch::channel(UiData::default());
+    let (metrics_tx, metrics_rx) = broadcast::channel::<Metrics>(10_000);
 
     let shutdown_handle = shutdown::setup_shutdown_handler(&shutdown_tx);
     let render_ui_handle = setup_render_ui(
@@ -38,8 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &args,
         &shutdown_tx,
         metrics_rx,
-        &ui_tx,
-        &metrics_buffer_size
+        &ui_tx
     );
     let request_sender_handle = http::setup_request_sender(
         &args,
@@ -61,11 +59,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let metrics = metrics_result.expect("Metrics collector failed");
 
     if !args.no_charts && !metrics.is_empty() {
-        println!("📈 Plotting charts...");
+        info!("📈 Plotting charts...");
 
         plot_metrics(&metrics, &args).await.expect("Failed to plot charts");
 
-        println!("📈 Charts saved in {}", args.charts_path);
+        info!("📈 Charts saved in {}", args.charts_path);
     }
 
     std::process::exit(0);

@@ -9,7 +9,16 @@ pub enum HttpMethod {
     Delete,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum LoadPattern {
+    RampUp,
+    Constant,
+    Spike,
+    Wave,
+    Step,
+}
+
+#[derive(Debug, Parser, Clone)]
 #[clap(version, about = "Simple HTTP stress tester")]
 pub struct TesterArgs {
     /// HTTP method to use
@@ -61,8 +70,8 @@ pub struct TesterArgs {
     #[arg(long = "spawn-rate", short = 'r', default_value = "1")]
     pub spawn_rate_per_tick: usize,
 
-    /// Interval between ticks (milliseconds) (default: 1000)
-    #[arg(long = "tick-interval", short = 'i', default_value = "1000")]
+    /// Interval between ticks (milliseconds) (default: 100)
+    #[arg(long = "tick-interval", short = 'i', default_value = "100")]
     pub tick_interval: u64,
 }
 
