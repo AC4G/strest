@@ -9,49 +9,48 @@ These screenshots showcase key metrics and real-time statistics from Strest’s 
   <img src="docs/screenshot.png" alt="CLI Screenshot" width="1000" />
 </div>
 
-<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 1000px; margin: 0 auto;">
-  <div style="width: 150px;">
+<p align="center" width="100%">
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/average_response_time.png" target="_blank">
       <img src="docs/average_response_time.png" alt="Average Response Time" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/cumulative_error_rate.png" target="_blank">
       <img src="docs/cumulative_error_rate.png" alt="Cumulative Error Rate" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/cumulative_successful_requests.png" target="_blank">
       <img src="docs/cumulative_successful_requests.png" alt="Cumulative Successful Requests" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/cumulative_total_requests.png" target="_blank">
       <img src="docs/cumulative_total_requests.png" alt="Cumulative Total Requests" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/latency_percentiles_P50.png" target="_blank">
       <img src="docs/latency_percentiles_P50.png" alt="Latency Percentiles P50" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/latency_percentiles_P90.png" target="_blank">
       <img src="docs/latency_percentiles_P90.png" alt="Latency Percentiles P90" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/latency_percentiles_P99.png" target="_blank">
       <img src="docs/latency_percentiles_P99.png" alt="Latency Percentiles P99" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-  <div style="width: 150px;">
+  </span>
+  <span style="display: inline-block; width: 150px;">
     <a href="docs/requests_per_second.png" target="_blank">
       <img src="docs/requests_per_second.png" alt="Requests Per Second" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
     </a>
-  </div>
-</div>
-
+  </span>
+</p>
 
 ## Features
 
