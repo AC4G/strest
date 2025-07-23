@@ -14,7 +14,7 @@ use args::TesterArgs;
 use tracing::info;
 use std::error::Error;
 use clap::Parser;
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 use crate::{charts::plot_metrics, metrics::Metrics, ui::{setup_render_ui, UiData}};
 
 #[tokio::main]
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (shutdown_tx, _) = broadcast::channel::<u16>(1);
     let (ui_tx, _) = watch::channel(UiData::default());
-    let (metrics_tx, metrics_rx) = broadcast::channel::<Metrics>(10_000);
+    let (metrics_tx, metrics_rx) = mpsc::unbounded_channel::<Metrics>();
 
     let shutdown_handle = shutdown::setup_shutdown_handler(&shutdown_tx);
     let render_ui_handle = setup_render_ui(
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &shutdown_tx,
         &ui_tx
     );
-    let metrics_handle = metrics::setup_metrics_collector(
+    let (metrics_aggregator_handle, metrics_handle) = metrics::setup_metrics_collector(
         &args,
         &shutdown_tx,
         metrics_rx,
@@ -49,16 +49,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let (_, _, metrics_result, _) = tokio::join!(
+    let (_, _, _, metrics_result, _) = tokio::join!(
         shutdown_handle,
         render_ui_handle,
+        metrics_aggregator_handle,
         metrics_handle,
         request_sender_handle.unwrap()
     );
 
     let metrics = metrics_result.expect("Metrics collector failed");
 
-    if !args.no_charts && !metrics.is_empty() {
+    if !metrics.is_empty() {
         info!("📈 Plotting charts...");
 
         plot_metrics(&metrics, &args).await.expect("Failed to plot charts");

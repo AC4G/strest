@@ -24,23 +24,33 @@ impl Metrics {
 pub fn setup_metrics_collector(
     args: &TesterArgs,
     shutdown_tx: &broadcast::Sender<u16>,
-    mut metrics_collector_rx: broadcast::Receiver<Metrics>,
+    mut metrics_collector_rx: mpsc::UnboundedReceiver<Metrics>,
     ui_tx: &watch::Sender<UiData>
-) -> JoinHandle<Vec<Metrics>> {
+) -> (JoinHandle<()>, JoinHandle<Vec<Metrics>>) {
     let shutdown_tx_main = shutdown_tx.clone();
     let mut shutdown_rx = shutdown_tx_main.subscribe();
     let ui_tx = ui_tx.clone();
 
     let target_duration = Duration::from_secs(args.target_duration);
     let expected_status_code = args.expected_status_code;
+    let no_charts = args.no_charts;
 
-    let (metrics_tx, mut metrics_rx) = mpsc::unbounded_channel::<Metrics>();
-    let (pending_tx, mut pending_rx) = mpsc::unbounded_channel::<Metrics>();
+    let (metrics_tx, mut metrics_rx) = mpsc::channel::<Metrics>(10_000);
 
-    let shutdown_tx_clone = shutdown_tx_main.clone();
-    let ui_tx_clone = ui_tx.clone();
+    let forwarder_handle = tokio::spawn({
+        async move {
+            loop {
+                tokio::select! {
+                    Some(msg) = metrics_collector_rx.recv() => {
+                        let _ = metrics_tx.try_send(msg);
+                    },
+                    _ = shutdown_rx.recv() => break,
+                }
+            }
+        }
+    });
 
-    tokio::spawn(async move {
+    let metrics_aggregator_handle = tokio::spawn(async move {
         let mut latency_window: VecDeque<(Instant, f64)> = VecDeque::new();
         let mut rps_window: VecDeque<(Instant, usize)> = VecDeque::new();
         let mut current_requests = 0;
@@ -48,8 +58,10 @@ pub fn setup_metrics_collector(
         let mut collected_metrics = Vec::new();
         let start_time = Instant::now();
         let mut last_ui_update = Instant::now();
+        let mut shutdown_rx = shutdown_tx_main.subscribe();
+        let ui_tx_clone = ui_tx.clone();
 
-        let _ = ui_tx_clone.send(UiData::new(
+        let _ = ui_tx.send(UiData::new(
             Duration::ZERO,
             0,
             0,
@@ -64,7 +76,10 @@ pub fn setup_metrics_collector(
                     let now = Instant::now();
                     let latency_ms = msg.response_time.as_secs_f64() * 1000.0;
 
-                    collected_metrics.push(msg.clone());
+                    if !no_charts {
+                        collected_metrics.push(msg.clone());
+                    }
+
                     current_requests += 1;
 
                     if msg.status_code == expected_status_code {
@@ -72,12 +87,8 @@ pub fn setup_metrics_collector(
                     }
 
                     latency_window.push_back((now, latency_ms));
-                    while let Some((ts, _)) = latency_window.front() {
-                        if now.duration_since(*ts) > Duration::from_secs(10) {
-                            latency_window.pop_front();
-                        } else {
-                            break;
-                        }
+                    while latency_window.front().map_or(false, |(ts, _)| now.duration_since(*ts) > Duration::from_secs(10)) {
+                        latency_window.pop_front();
                     }
 
                     if let Some((ts, count)) = rps_window.back_mut() {
@@ -90,12 +101,8 @@ pub fn setup_metrics_collector(
                         rps_window.push_back((now, 1));
                     }
 
-                    while let Some((ts, _)) = rps_window.front() {
-                        if now.duration_since(*ts) > Duration::from_secs(60) {
-                            rps_window.pop_front();
-                        } else {
-                            break;
-                        }
+                    while rps_window.front().map_or(false, |(ts, _)| now.duration_since(*ts) > Duration::from_secs(60)) {
+                        rps_window.pop_front();
                     }
 
                     let rps: f64 = rps_window
@@ -129,50 +136,16 @@ pub fn setup_metrics_collector(
                     }
 
                     if now.duration_since(start_time) >= target_duration {
-                        let _ = shutdown_tx_clone.send(1);
+                        let _ = shutdown_tx_main.send(1);
                         break;
                     }
-
-                    tokio::task::yield_now().await;
                 },
-                else => break,
+                _ = shutdown_rx.recv() => break,
             }
         }
+
+        collected_metrics
     });
 
-    tokio::spawn(async move {
-        let mut metrics = Vec::new();
-        let mut pending_metrics = Vec::new();
-
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-
-                while let Ok(msg) = pending_rx.try_recv() {
-                    pending_metrics.push(msg);
-                }
-
-                if !pending_metrics.is_empty() {
-                    for m in pending_metrics.drain(..) {
-                        let _ = metrics_tx.send(m);
-                    }
-                }
-            }
-        });
-
-        loop {
-            tokio::select! {
-                Ok(_) = shutdown_rx.recv() => {
-                    break;
-                }
-
-                Ok(msg) = metrics_collector_rx.recv() => {
-                    metrics.push(msg.clone());
-                    let _ = pending_tx.send(msg);
-                }
-            }
-        }
-
-        metrics
-    })
+    (forwarder_handle, metrics_aggregator_handle)
 }
