@@ -9,7 +9,7 @@ These screenshots showcase key metrics and real-time statistics from Strest’s 
   <img src="docs/screenshot.png" alt="CLI Screenshot" width="1000" />
 </div>
 
-<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 1000px; margin: 0 auto;">
+<div style="text-align: center;">
   <a href="docs/average_response_time.png" target="_blank">
     <img src="docs/average_response_time.png" alt="Average Response Time" width="150" style="border: 1px solid #ddd; border-radius: 4px;" />
   </a>
