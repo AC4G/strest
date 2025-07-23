@@ -76,7 +76,7 @@ If you are interested in contributing to the project, we welcome your input and 
 
 3. Submit a pull request with your changes. Our team will thoroughly review your contributions, provide feedback, and collaborate with you to incorporate your work into the project.
 
-We greatly appreciate your interest in contributing to Strest. Your contributions help improve the tool for everyone who uses it. Thank you for considering joining our community of contributors.
+We greatly appreciate your interest in contributing to Strest. Your contributions help improve the tool for everyone who uses it.
 
 ## License
 
