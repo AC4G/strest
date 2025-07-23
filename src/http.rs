@@ -4,7 +4,7 @@ extern crate async_trait;
 use std::time::Duration;
 
 use reqwest::{Client, Proxy, Request};
-use tokio::{sync::broadcast, time::{interval, sleep, Instant}};
+use tokio::{sync::{broadcast, mpsc}, time::{interval, sleep, Instant}};
 use tracing::error;
 
 use crate::{args::{HttpMethod, TesterArgs}, metrics::Metrics};
@@ -12,7 +12,7 @@ use crate::{args::{HttpMethod, TesterArgs}, metrics::Metrics};
 pub fn setup_request_sender(
     args: &TesterArgs,
     shutdown_tx: &broadcast::Sender<u16>,
-    metrics_tx: &broadcast::Sender<Metrics>,
+    metrics_tx: &mpsc::UnboundedSender<Metrics>,
 ) -> Option<tokio::task::JoinHandle<()>> {
     let shutdown_tx = shutdown_tx.clone();
     let metrics_tx = metrics_tx.clone();
@@ -78,7 +78,7 @@ pub fn setup_request_sender(
 pub fn create_sender_task(
     args: TesterArgs,
     shutdown_tx: broadcast::Sender<u16>,
-    metrics_tx: broadcast::Sender<Metrics>,
+    metrics_tx: mpsc::UnboundedSender<Metrics>,
     client: Client,
     request: Request,
 ) -> tokio::task::JoinHandle<()> {
