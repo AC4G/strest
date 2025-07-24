@@ -112,7 +112,7 @@ strest --help
 
 ### Charts
 
-By default charts are stored in the `./charts` directory where `strest` is executed. You can change the location of the charts directory by setting via the `charts` flag.
+By default charts are stored in the `./charts` directory where `strest` is executed. You can change the location of the charts directory by setting via the `--charts-path` or `-c` flag.
 
 To disable charts use the `--no-charts` flag.
 
