@@ -3,7 +3,7 @@
 Strest is a command-line tool for stress testing web servers by sending a large number of HTTP requests. It provides insights into server performance by measuring average response times, and calculating the maximum requests per minute the server can handle and other relevant metrics.
 
 # Screenshot Overview  
-These screenshots showcase key metrics and real-time statistics from Strest’s stress testing, including response times, error rates, request counts, latency percentiles, and throughput.
+These screenshots showcase key metrics and real-time statistics from Strest’s stress testing, including charts with response time, error rate, request count, latency percentile, and throughput.
 
 <div style="text-align: center;">
   <img src="docs/screenshot.png" alt="CLI Screenshot" width="1000" />
