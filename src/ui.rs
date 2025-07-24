@@ -104,7 +104,6 @@ impl UiActions for Ui {
 
         f.render_widget(percentiles_text, chunks[1]);
 
-        // Chart logic
         let data_points: Vec<(f64, f64)> = latencies.clone();
         let y_max = lat_values.iter().cloned().fold(0.0, f64::max).ceil().max(10.0);
         let x_max = data_points.last().map(|(x, _)| *x).unwrap_or(0.0).ceil();

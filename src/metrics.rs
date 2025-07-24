@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, time::Duration};
+use std::{collections::VecDeque, ops::RangeInclusive, time::Duration};
 
 use tokio::{sync::{broadcast, mpsc, watch}, task::JoinHandle, time::Instant};
 
@@ -21,6 +21,26 @@ impl Metrics {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct MetricsRange(pub RangeInclusive<u64>);
+
+impl std::str::FromStr for MetricsRange {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() != 2 {
+            return Err("Expected format start-end (e.g., 10-30)".to_string());
+        }
+        let start: u64 = parts[0].parse().map_err(|_| "Invalid start value".to_string())?;
+        let end: u64 = parts[1].parse().map_err(|_| "Invalid end value".to_string())?;
+        if start > end {
+            return Err("Start must be <= end".to_string());
+        }
+        Ok(MetricsRange(start..=end))
+    }
+}
+
 pub fn setup_metrics_collector(
     args: &TesterArgs,
     shutdown_tx: &broadcast::Sender<u16>,
@@ -37,18 +57,18 @@ pub fn setup_metrics_collector(
 
     let (metrics_tx, mut metrics_rx) = mpsc::channel::<Metrics>(10_000);
 
-    let forwarder_handle = tokio::spawn({
-        async move {
-            loop {
-                tokio::select! {
-                    Some(msg) = metrics_collector_rx.recv() => {
-                        let _ = metrics_tx.try_send(msg);
-                    },
-                    _ = shutdown_rx.recv() => break,
-                }
+    let forwarder_handle = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                Some(msg) = metrics_collector_rx.recv() => {
+                    let _ = metrics_tx.try_send(msg);
+                },
+                _ = shutdown_rx.recv() => break,
             }
         }
     });
+
+    let metrics_range = args.metrics_range.clone();
 
     let metrics_aggregator_handle = tokio::spawn(async move {
         let mut latency_window: VecDeque<(Instant, f64)> = VecDeque::new();
@@ -77,7 +97,15 @@ pub fn setup_metrics_collector(
                     let latency_ms = msg.response_time.as_secs_f64() * 1000.0;
 
                     if !no_charts {
-                        collected_metrics.push(msg.clone());
+                        let seconds_elapsed = now.duration_since(start_time).as_secs();
+                        let in_range = match &metrics_range {
+                            Some(MetricsRange(range)) => range.contains(&seconds_elapsed),
+                            None => true,
+                        };
+
+                        if in_range {
+                            collected_metrics.push(msg.clone());
+                        }
                     }
 
                     current_requests += 1;

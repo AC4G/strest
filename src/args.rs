@@ -1,5 +1,7 @@
 use clap::{Parser, ValueEnum};
 
+use crate::metrics::MetricsRange;
+
 #[derive(Debug, Clone, ValueEnum)]
 pub enum HttpMethod {
     Get,
@@ -51,19 +53,19 @@ pub struct TesterArgs {
     pub expected_status_code: u16,
 
     /// Path to save charts to
-    #[arg(long = "charts", short = 'c', default_value = "./charts")]
+    #[arg(long, short = 'c', default_value = "./charts")]
     pub charts_path: String,
 
     /// Disable chart generation
-    #[arg(long = "no-charts")]
+    #[arg(long, short = 'n')]
     pub no_charts: bool,
 
     /// Proxy URL (optional)
-    #[arg(long = "proxy", short = 'p')]
+    #[arg(long, short = 'p')]
     pub proxy_url: Option<String>,
 
     /// Max number of concurrent tasks for each request worker (default: 1000)
-    #[arg(long = "max-tasks", short = 'm', default_value = "1000")]
+    #[arg(long, short = 'm', default_value = "1000")]
     pub max_tasks: usize,
 
     /// Number of tasks to spawn per tick (default: 1)
@@ -71,8 +73,12 @@ pub struct TesterArgs {
     pub spawn_rate_per_tick: usize,
 
     /// Interval between ticks (milliseconds) (default: 100)
-    #[arg(long = "tick-interval", short = 'i', default_value = "100")]
+    #[arg(long = "spawn-interval", short = 'i', default_value = "100")]
     pub tick_interval: u64,
+
+    /// Range, in seconds, of metrics to collect for charts (e.g., 10-30)
+    #[arg(long = "metrics-range", short = 'M', value_parser, required = false)]
+    pub metrics_range: Option<MetricsRange>,
 }
 
 fn parse_header(s: &str) -> Result<(String, String), String> {
